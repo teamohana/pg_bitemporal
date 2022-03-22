@@ -1,85 +1,95 @@
-begin;
-create schema if not exists temporal_relationships;
-grant usage on schema temporal_relationships to public;
-set local search_path to temporal_relationships, public;
--- create a domain if not exists 
+BEGIN;
+CREATE SCHEMA IF NOT EXISTS temporal_relationships;
+GRANT usage ON SCHEMA temporal_relationships TO public;
+SET local search_path TO temporal_relationships, public;
+-- create a domain if not exists
 DO $d$
 DECLARE
-  domain_range_name text default 'timeperiod';
-  domain_range_type text default 'tstzrange';
-  domain_i_name text default 'time_endpoint';
-  domain_i_type text default 'timestamptz';
+    domain_range_name text DEFAULT 'timeperiod';
+    domain_range_type text DEFAULT 'tstzrange';
+    domain_i_name text DEFAULT 'time_endpoint';
+    domain_i_type text DEFAULT 'timestamptz';
 BEGIN
--- Create timeperiod domain
-PERFORM n.nspname as "Schema",
-        t.typname as "Name",
-        pg_catalog.format_type(t.typbasetype, t.typtypmod) as "Type"
-FROM pg_catalog.pg_type t
-      LEFT JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
-WHERE t.typtype = 'd'
-       AND n.nspname <> 'pg_catalog'
-       AND n.nspname <> 'information_schema'
-       AND pg_catalog.pg_type_is_visible(t.oid)
-   AND t.typname = domain_range_name;
-   if FOUND then
-     raise NOTICE 'Domain % already exists', domain_range_name;
-   else
-     execute format('create domain %I as %I', domain_range_name, domain_range_type);
-   end if;
--- Create time_endpoint domain
-PERFORM n.nspname as "Schema",
-        t.typname as "Name",
-        pg_catalog.format_type(t.typbasetype, t.typtypmod) as "Type"
-FROM pg_catalog.pg_type t
-      LEFT JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
-WHERE t.typtype = 'd'
-       AND n.nspname <> 'pg_catalog'
-       AND n.nspname <> 'information_schema'
-       AND pg_catalog.pg_type_is_visible(t.oid)
-   AND t.typname = domain_i_name;
-   if FOUND then
-     raise NOTICE 'Domain % already exists', domain_i_name;
-   else
-     execute format('create domain %I as %I', domain_i_name, domain_i_type);
-   end if;
+    -- Create timeperiod domain
+    PERFORM
+        n.nspname AS "Schema",
+        t.typname AS "Name",
+        pg_catalog.format_type(t.typbasetype, t.typtypmod) AS "Type"
+    FROM
+        pg_catalog.pg_type t
+    LEFT JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
+WHERE
+    t.typtype = 'd'
+        AND n.nspname <> 'pg_catalog'
+        AND n.nspname <> 'information_schema'
+        AND pg_catalog.pg_type_is_visible(t.oid)
+        AND t.typname = domain_range_name;
+    IF FOUND THEN
+        RAISE NOTICE 'Domain % already exists', domain_range_name;
+    ELSE
+        EXECUTE format('create domain %I as %I', domain_range_name, domain_range_type);
+    END IF;
+    -- Create time_endpoint domain
+    PERFORM
+        n.nspname AS "Schema",
+        t.typname AS "Name",
+        pg_catalog.format_type(t.typbasetype, t.typtypmod) AS "Type"
+    FROM
+        pg_catalog.pg_type t
+    LEFT JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
+WHERE
+    t.typtype = 'd'
+        AND n.nspname <> 'pg_catalog'
+        AND n.nspname <> 'information_schema'
+        AND pg_catalog.pg_type_is_visible(t.oid)
+        AND t.typname = domain_i_name;
+    IF FOUND THEN
+        RAISE NOTICE 'Domain % already exists', domain_i_name;
+    ELSE
+        EXECUTE format('create domain %I as %I', domain_i_name, domain_i_type);
+    END IF;
 END;
 $d$;
-create or replace
-function timeperiod( p_range_start time_endpoint, p_range_end time_endpoint)
-RETURNS timeperiod
-language sql IMMUTABLE
-as
-$func$
-   select tstzrange(p_range_start, p_range_end,'[)')::timeperiod;
-$func$
-SET search_path = 'temporal_relationships';
+CREATE OR REPLACE FUNCTION timeperiod (p_range_start time_endpoint, p_range_end time_endpoint)
+    RETURNS timeperiod
+    LANGUAGE sql
+    IMMUTABLE
+    AS $func$
+    SELECT
+        tstzrange(p_range_start, p_range_end, '[)')::timeperiod;
+$func$ SET search_path = 'temporal_relationships';
 -- backwards compatible
-create or replace
-function timeperiod_range( _s time_endpoint, _e time_endpoint, _ignored text)
-returns timeperiod
-language sql
-as
-$func$
-   select timeperiod(_s,_e);
-$func$
-SET search_path = 'temporal_relationships';
-create or replace 
-function xor(a boolean, b boolean) returns boolean
-language sql IMMUTABLE
-as 
-$$ select  ( (not a) <> (not b)); $$;
-
-create or replace 
-function fst( x anyrange ) returns anyelement
-language SQL IMMUTABLE 
-as
-$$ select lower(x); $$;
-
-create or replace
-function snd( x anyrange ) returns anyelement
-language SQL IMMUTABLE 
-as
-$$ select upper(x); $$;
+CREATE OR REPLACE FUNCTION timeperiod_range (_s time_endpoint, _e time_endpoint, _ignored text)
+    RETURNS timeperiod
+    LANGUAGE sql
+    AS $func$
+    SELECT
+        timeperiod (_s, _e);
+$func$ SET search_path = 'temporal_relationships';
+CREATE OR REPLACE FUNCTION XOR (a boolean, b boolean)
+    RETURNS boolean
+    LANGUAGE sql
+    IMMUTABLE
+    AS $$
+    SELECT
+        ((NOT a) <> (NOT b));
+$$;
+CREATE OR REPLACE FUNCTION fst (x anyrange)
+    RETURNS anyelement
+    LANGUAGE SQL
+    IMMUTABLE
+    AS $$
+    SELECT
+        lower(x);
+$$;
+CREATE OR REPLACE FUNCTION snd (x anyrange)
+    RETURNS anyelement
+    LANGUAGE SQL
+    IMMUTABLE
+    AS $$
+    SELECT
+        upper(x);
+$$;
 --
 -- [starts] [starts^-1]
 --
@@ -91,13 +101,15 @@ $$ select upper(x); $$;
 --  A  |-------|
 --  E  |---|
 --
-create or replace
-function has_starts(a timeperiod , b timeperiod )
-returns boolean language SQL IMMUTABLE 
-as $$
-  select fst(a) = fst(b) and snd(a) <> snd(b);
-$$
-SET search_path = 'temporal_relationships';
+CREATE OR REPLACE FUNCTION has_starts (a timeperiod, b timeperiod)
+    RETURNS boolean
+    LANGUAGE SQL
+    IMMUTABLE
+    AS $$
+    SELECT
+        fst (a) = fst (b)
+        AND snd (a) <> snd (b);
+$$ SET search_path = 'temporal_relationships';
 --
 -- [finishes] [finishes^-1]
 --
@@ -109,13 +121,15 @@ SET search_path = 'temporal_relationships';
 --  A      |---|
 --  E  |-------|
 --
-create or replace
-function has_finishes(a timeperiod, b timeperiod)
-returns boolean language SQL IMMUTABLE 
-as $$
-  select snd(a) = snd(b) and fst(a) <> fst(b);
-$$
-SET search_path = 'temporal_relationships';
+CREATE OR REPLACE FUNCTION has_finishes (a timeperiod, b timeperiod)
+    RETURNS boolean
+    LANGUAGE SQL
+    IMMUTABLE
+    AS $$
+    SELECT
+        snd (a) = snd (b)
+        AND fst (a) <> fst (b);
+$$ SET search_path = 'temporal_relationships';
 --
 -- [equals]
 --
@@ -123,14 +137,16 @@ SET search_path = 'temporal_relationships';
 --  A  |----|
 --  E  |----|
 --
-create or replace
-function equals(a timeperiod, b timeperiod)
-returns boolean language SQL IMMUTABLE 
-as $$
-  -- doubtful = operator exists for timeperiod
- select fst(a) = fst(b) and snd(a) = snd(b) ;
-$$
-SET search_path = 'temporal_relationships';
+CREATE OR REPLACE FUNCTION equals (a timeperiod, b timeperiod)
+    RETURNS boolean
+    LANGUAGE SQL
+    IMMUTABLE
+    AS $$
+    -- doubtful = operator exists for timeperiod
+    SELECT
+        fst (a) = fst (b)
+        AND snd (a) = snd (b);
+$$ SET search_path = 'temporal_relationships';
 --
 -- [during]
 --
@@ -138,13 +154,15 @@ SET search_path = 'temporal_relationships';
 --  A    |---|
 --  E  |-------|
 --
-create or replace
-function is_during(a timeperiod, b timeperiod)
-returns boolean language SQL IMMUTABLE 
-as $$
-  select (fst(a) > fst(b)) and (snd(a) < snd(b));
-$$
-SET search_path = 'temporal_relationships';
+CREATE OR REPLACE FUNCTION is_during (a timeperiod, b timeperiod)
+    RETURNS boolean
+    LANGUAGE SQL
+    IMMUTABLE
+    AS $$
+    SELECT
+        (fst (a) > fst (b))
+        AND (snd (a) < snd (b));
+$$ SET search_path = 'temporal_relationships';
 --
 -- [during^-1] contained
 --
@@ -152,24 +170,26 @@ SET search_path = 'temporal_relationships';
 --  A  |-------|
 --  E    |---|
 --
-create or replace
-function is_contained_in(a timeperiod, b timeperiod)
-returns boolean language SQL IMMUTABLE 
-as $$
-  select is_during(b, a);
-$$
-SET search_path = 'temporal_relationships';
-
+CREATE OR REPLACE FUNCTION is_contained_in (a timeperiod, b timeperiod)
+    RETURNS boolean
+    LANGUAGE SQL
+    IMMUTABLE
+    AS $$
+    SELECT
+        is_during (b, a);
+$$ SET search_path = 'temporal_relationships';
 --
--- [during] or [during^-1] 
+-- [during] or [during^-1]
 --
-create or replace
-function has_during(a timeperiod, b timeperiod)
-returns boolean language SQL IMMUTABLE 
-as $$
-  select is_during(a, b) or is_during(b,a);
-$$
-SET search_path = 'temporal_relationships';
+CREATE OR REPLACE FUNCTION has_during (a timeperiod, b timeperiod)
+    RETURNS boolean
+    LANGUAGE SQL
+    IMMUTABLE
+    AS $$
+    SELECT
+        is_during (a, b)
+        OR is_during (b, a);
+$$ SET search_path = 'temporal_relationships';
 --
 -- [overlaps]
 --
@@ -181,25 +201,28 @@ SET search_path = 'temporal_relationships';
 --  A     |-----|
 --  E  |-----|
 --
-create or replace
-function is_overlaps(a timeperiod, b timeperiod)
-returns boolean language SQL IMMUTABLE 
-
-as $$
-  select  fst(a) < fst(b) and snd(a) > fst(b) and snd(a) < snd(b);
-$$
-SET search_path = 'temporal_relationships';
-
+CREATE OR REPLACE FUNCTION is_overlaps (a timeperiod, b timeperiod)
+    RETURNS boolean
+    LANGUAGE SQL
+    IMMUTABLE
+    AS $$
+    SELECT
+        fst (a) < fst (b)
+        AND snd (a) > fst (b)
+        AND snd (a) < snd (b);
+$$ SET search_path = 'temporal_relationships';
 --
 -- either overlaps the other [overlaps] [overlaps^-1]
 --
-create or replace
-function has_overlaps(a timeperiod, b timeperiod)
-returns boolean language SQL IMMUTABLE 
-as $$
-  select  is_overlaps(a , b ) or is_overlaps(b , a ) ;
-$$
-SET search_path = 'temporal_relationships';
+CREATE OR REPLACE FUNCTION has_overlaps (a timeperiod, b timeperiod)
+    RETURNS boolean
+    LANGUAGE SQL
+    IMMUTABLE
+    AS $$
+    SELECT
+        is_overlaps (a, b)
+        OR is_overlaps (b, a);
+$$ SET search_path = 'temporal_relationships';
 --
 -- [before]
 --
@@ -207,13 +230,14 @@ SET search_path = 'temporal_relationships';
 --  A  |-----|
 --  E           |-----|
 --
-create or replace
-function is_before(a timeperiod, b timeperiod)
-returns boolean language SQL IMMUTABLE 
-as $$
-  select  snd(a) < fst(b);
-$$
-SET search_path = 'temporal_relationships';
+CREATE OR REPLACE FUNCTION is_before (a timeperiod, b timeperiod)
+    RETURNS boolean
+    LANGUAGE SQL
+    IMMUTABLE
+    AS $$
+    SELECT
+        snd (a) < fst (b);
+$$ SET search_path = 'temporal_relationships';
 --
 -- [before^-1]
 --
@@ -221,25 +245,27 @@ SET search_path = 'temporal_relationships';
 --  A           |-----|
 --  E   |-----|
 --
-create or replace
-function is_after(a timeperiod, b timeperiod)
-returns boolean language SQL IMMUTABLE 
-as $$
+CREATE OR REPLACE FUNCTION is_after (a timeperiod, b timeperiod)
+    RETURNS boolean
+    LANGUAGE SQL
+    IMMUTABLE
+    AS $$
     -- is_before(b, a)
-   select snd(b) < fst(a);
-$$
-SET search_path = 'temporal_relationships';
-
--- 
+    SELECT
+        snd (b) < fst (a);
+$$ SET search_path = 'temporal_relationships';
+--
 -- either [before] [before^-1]
--- 
-create or replace
-function has_before(a timeperiod, b timeperiod)
-returns boolean language SQL IMMUTABLE 
-as $$
-  select  snd(a) < fst(b) or snd(b) < fst(a);
-$$
-SET search_path = 'temporal_relationships';
+--
+CREATE OR REPLACE FUNCTION has_before (a timeperiod, b timeperiod)
+    RETURNS boolean
+    LANGUAGE SQL
+    IMMUTABLE
+    AS $$
+    SELECT
+        snd (a) < fst (b)
+        OR snd (b) < fst (a);
+$$ SET search_path = 'temporal_relationships';
 --
 -- [meets] [meets^-1]
 --
@@ -253,90 +279,99 @@ SET search_path = 'temporal_relationships';
 --  A         |-----|
 --  E   |-----|
 --
-create or replace
-function is_meets(a timeperiod, b timeperiod)
-returns boolean language SQL IMMUTABLE 
-as $$
- select  snd(a) = fst(b) ;
-$$
-SET search_path = 'temporal_relationships';
-
-create or replace
-function has_meets(a timeperiod, b timeperiod)
-returns boolean language SQL IMMUTABLE 
-as $$
-  select snd(a) = fst(b) or snd(b) = fst(a);
-$$
-SET search_path = 'temporal_relationships';
--- 
+CREATE OR REPLACE FUNCTION is_meets (a timeperiod, b timeperiod)
+    RETURNS boolean
+    LANGUAGE SQL
+    IMMUTABLE
+    AS $$
+    SELECT
+        snd (a) = fst (b);
+$$ SET search_path = 'temporal_relationships';
+CREATE OR REPLACE FUNCTION has_meets (a timeperiod, b timeperiod)
+    RETURNS boolean
+    LANGUAGE SQL
+    IMMUTABLE
+    AS $$
+    SELECT
+        snd (a) = fst (b)
+        OR snd (b) = fst (a);
+$$ SET search_path = 'temporal_relationships';
+--
 -- Partition of Allen Relationships
 --
-
--- 
--- [Includes] 
+--
+-- [Includes]
 --     [Contains] or [Overlaps]
-create or replace
-function has_includes(a timeperiod, b timeperiod)
-returns boolean language SQL IMMUTABLE 
-as $$
-  select  fst(a) = fst(b) or snd(a) = snd(b) or 
-      (snd(a) <= snd(b) and (fst(a) >= fst(b) or fst(b) < snd(a))) or 
-        (snd(a) >= snd(b) and (fst(a) < snd(b) or fst(a) <= fst(b)));
-$$
-SET search_path = 'temporal_relationships';
-
+CREATE OR REPLACE FUNCTION has_includes (a timeperiod, b timeperiod)
+    RETURNS boolean
+    LANGUAGE SQL
+    IMMUTABLE
+    AS $$
+    SELECT
+        fst (a) = fst (b)
+        OR snd (a) = snd (b)
+        OR (snd (a) <= snd (b)
+            AND (fst (a) >= fst (b)
+                OR fst (b) < snd (a)))
+        OR (snd (a) >= snd (b)
+            AND (fst (a) < snd (b)
+                OR fst (a) <= fst (b)));
+$$ SET search_path = 'temporal_relationships';
 --
 -- [Contains]
 --    [Encloses] or [Equals]
-
-create or replace
-function has_contains(a timeperiod, b timeperiod)
-returns boolean language SQL IMMUTABLE 
-
-as $$
- select fst(a) = fst(b) or snd(a) = snd(b) or 
-     (snd(a) < snd(b) and fst(a) > fst(b)) or 
-       (snd(b) < snd(a) and fst(b) > fst(a));
-$$
-SET search_path = 'temporal_relationships';
-
+CREATE OR REPLACE FUNCTION has_contains (a timeperiod, b timeperiod)
+    RETURNS boolean
+    LANGUAGE SQL
+    IMMUTABLE
+    AS $$
+    SELECT
+        fst (a) = fst (b)
+        OR snd (a) = snd (b)
+        OR (snd (a) < snd (b)
+            AND fst (a) > fst (b))
+        OR (snd (b) < snd (a)
+            AND fst (b) > fst (a));
+$$ SET search_path = 'temporal_relationships';
 --
 -- [Aligns With]
 --   [Starts] or [Finishes]
 --
-create or replace
-function has_aligns_with(a timeperiod, b timeperiod)
-returns boolean language SQL IMMUTABLE 
-as $$
-   select   xor( fst(a) = fst(b) , snd(a) = snd(b) );
-$$
-SET search_path = 'temporal_relationships';
-
+CREATE OR REPLACE FUNCTION has_aligns_with (a timeperiod, b timeperiod)
+    RETURNS boolean
+    LANGUAGE SQL
+    IMMUTABLE
+    AS $$
+    SELECT
+        XOR (fst (a) = fst (b),
+            snd (a) = snd (b));
+$$ SET search_path = 'temporal_relationships';
 --
 -- [Encloses]
 --   [Aligns With] or [During]
--- 
-
-create or replace
-function has_encloses(a timeperiod, b timeperiod)
-returns boolean language SQL IMMUTABLE 
-as $$
-  select has_during(a,b) or has_aligns_with(a,b);
-$$
-SET search_path = 'temporal_relationships';
-
-
+--
+CREATE OR REPLACE FUNCTION has_encloses (a timeperiod, b timeperiod)
+    RETURNS boolean
+    LANGUAGE SQL
+    IMMUTABLE
+    AS $$
+    SELECT
+        has_during (a, b)
+        OR has_aligns_with (a, b);
+$$ SET search_path = 'temporal_relationships';
 --
 -- [Excludes]
 --   [Before] or [Meets]
 --
-create or replace
-function has_excludes(a timeperiod, b timeperiod)
-returns boolean language SQL IMMUTABLE 
-as $$
-   select fst(a) >= snd(b) or fst(b) >= snd(a) ;
-$$
-SET search_path = 'temporal_relationships';
-commit;
+CREATE OR REPLACE FUNCTION has_excludes (a timeperiod, b timeperiod)
+    RETURNS boolean
+    LANGUAGE SQL
+    IMMUTABLE
+    AS $$
+    SELECT
+        fst (a) >= snd (b)
+        OR fst (b) >= snd (a);
+$$ SET search_path = 'temporal_relationships';
+COMMIT;
 
 -- vim: set filetype=pgsql expandtab tabstop=2 shiftwidth=2:
