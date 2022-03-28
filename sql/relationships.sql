@@ -1,8 +1,9 @@
-BEGIN;
-CREATE SCHEMA IF NOT EXISTS temporal_relationships;
-GRANT usage ON SCHEMA temporal_relationships TO public;
-SET local search_path TO temporal_relationships, public;
--- create a domain if not exists
+--begin;
+create schema if not exists temporal_relationships;
+grant usage on schema temporal_relationships to public;
+set local search_path to temporal_relationships, public;
+-- create a domain if not exists 
+
 DO $d$
 DECLARE
     domain_range_name text DEFAULT 'timeperiod';
@@ -363,15 +364,15 @@ $$ SET search_path = 'temporal_relationships';
 -- [Excludes]
 --   [Before] or [Meets]
 --
-CREATE OR REPLACE FUNCTION has_excludes (a timeperiod, b timeperiod)
-    RETURNS boolean
-    LANGUAGE SQL
-    IMMUTABLE
-    AS $$
-    SELECT
-        fst (a) >= snd (b)
-        OR fst (b) >= snd (a);
-$$ SET search_path = 'temporal_relationships';
-COMMIT;
+
+create or replace
+function has_excludes(a timeperiod, b timeperiod)
+returns boolean language SQL IMMUTABLE 
+as $$
+   select fst(a) >= snd(b) or fst(b) >= snd(a) ;
+$$
+SET search_path = 'temporal_relationships';
+--commit;
+
 
 -- vim: set filetype=pgsql expandtab tabstop=2 shiftwidth=2:

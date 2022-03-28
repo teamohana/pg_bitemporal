@@ -7,8 +7,9 @@ SET client_min_messages TO warning;
 
 \ir extensions.sql
 \ir relationships.sql
-BEGIN;
-SET search_path TO bitemporal_internal, public;
+
+--begin;
+set search_path to bitemporal_internal, public;
 \ir bitemporal_internal_schema.sql
 \ir  metadata.sql
 \ir ll_create_bitemporal_table.sql
@@ -23,5 +24,6 @@ SET search_path TO bitemporal_internal, public;
 \ir ll_bitemporal_update.sql
 \ir ll_bitemporal_update_select.sql
 \ir ll_bitemporal_delete_select.sql
-COMMIT;
+--commit;
+
 
