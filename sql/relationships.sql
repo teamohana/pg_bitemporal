@@ -1,4 +1,4 @@
-begin;
+--begin;
 create schema if not exists temporal_relationships;
 grant usage on schema temporal_relationships to public;
 set local search_path to temporal_relationships, public;
@@ -337,6 +337,6 @@ as $$
    select fst(a) >= snd(b) or fst(b) >= snd(a) ;
 $$
 SET search_path = 'temporal_relationships';
-commit;
+--commit;
 
 -- vim: set filetype=pgsql expandtab tabstop=2 shiftwidth=2:
