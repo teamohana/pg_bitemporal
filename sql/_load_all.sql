@@ -1,15 +1,15 @@
 \echo Start load all bitemporal code
-\set ON_ERROR_STOP on
+\set local ON_ERROR_STOP on
 \pset pager off
 -- toggle timing to get a better idea of what is going on
 --\timing on
-set client_min_messages to warning;
+set local client_min_messages to warning;
 
 \ir extensions.sql
 \ir relationships.sql
 
 -- begin;
-set search_path to bitemporal_internal, public;
+set local search_path to bitemporal_internal, public;
 
 
 \ir bitemporal_internal_schema.sql
