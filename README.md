@@ -1,5 +1,9 @@
 # pg\_bitemporal 
 
+# For teamohana 
+
+Remember to comment out the transactions in `_load_all.sql`, `extensions.sql` and `relationships.sql`. since sqitch runs these in a transaction already.
+
 ## Project Tools
 
 * pg\_prove 
