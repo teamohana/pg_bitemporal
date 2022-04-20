@@ -99,7 +99,7 @@ into v_keys;
                                   
 EXECUTE 
 --v_sql :=
-format($u$ UPDATE %s SET (%s) = ( %s ) 
+format($u$ UPDATE %s SET (%s) = (select %s ) 
                     WHERE ( %s )in ( %s ) $u$  
           , v_table
           , p_list_of_fields
